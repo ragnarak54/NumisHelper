@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "Numismatic Provenance Resolver",
+  "version": "1.0.0",
+  "description": "Highlight a provenance citation (e.g. 'Gorny & Mosch 257, 2018, 357') and jump directly to that lot on NumisBids or ACSearch.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.numisbids.com/*",
+    "https://www.acsearch.info/*",
+    "<all_urls>",
+    "https://www.biddr.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "parser.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
+    },
+    {
+      "matches": [
+        "https://www.numisbids.com/sale/*/lot/*",
+        "https://www.numisbids.com/watchlist*"
+      ],
+      "js": [
+        "numisbids_fees.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://www.biddr.com/*/live*",
+        "https://www.biddr.com/*/auction*"
+      ],
+      "js": [
+        "biddr_fees.js"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Numismatic Provenance Resolver"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
