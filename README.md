@@ -2,9 +2,9 @@
 
 A Chrome extension for ancient coin collectors. It does two things:
 
-1. **Provenance lookup** — highlight a citation like `CNG 100, September 2015, lot 450` on any webpage and a button appears to jump directly to that lot on [NumisBids](https://www.numisbids.com) or [ACSearch](https://www.acsearch.info).
+1. **Provenance lookup:** highlight a citation like `CNG 100, September 2015, lot 450` on any webpage and a button appears to jump directly to that lot on [NumisBids](https://www.numisbids.com) or [ACSearch](https://www.acsearch.info).
 
-2. **Buyer's premium calculator** — on NumisBids lot and watchlist pages, and on [Biddr](https://www.biddr.com) live auctions, shows the all-in price including buyer's premium next to every hammer price.
+2. **Buyer's premium calculator:** on NumisBids lot and watchlist pages, and on [Biddr](https://www.biddr.com) live auctions, shows the all-in price including buyer's premium next to every hammer price.
 
 ---
 
@@ -12,15 +12,15 @@ A Chrome extension for ancient coin collectors. It does two things:
 
 Chrome does not allow installing extensions from outside the Web Store without enabling developer mode. This is a one-time step.
 
-1. Download this repository as a ZIP (green **Code** button → **Download ZIP**) and unzip it somewhere permanent — don't delete the folder after installing.
+1. Download this repository as a ZIP (green **Code** button → **Download ZIP**) and unzip it somewhere permanent. Don't delete the folder after installing!
 2. Open Chrome and go to `chrome://extensions`
 3. Enable **Developer mode** (toggle in the top-right corner)
 4. Click **Load unpacked** and select the unzipped folder
 5. The 🏛️ icon will appear in your toolbar
 
-> Chrome will show a banner on startup saying developer mode extensions are enabled — this is normal for extensions installed this way.
+> Chrome will show a banner on startup saying developer mode extensions are enabled. This is normal for extensions installed this way.
 
-To update: replace the folder contents with the new files, then go to `chrome://extensions` and click the refresh icon on the extension card.
+To update: replace the folder contents with the new files, then go to `chrome://extensions` and click the refresh icon on the extension card. You'll have to hard refresh any already opened Biddr/NumisBids pages for them to update.
 
 ---
 
@@ -40,6 +40,8 @@ Highlight any auction citation on any webpage and a **Find Lot** button appears.
 - `Jean Elsen 142, 14 September 2019, lot 161`
 - `NAC 84, 2015, 526`
 - `Sotheby's, 14 October 1985, lot 432`
+
+There's a near infinite number of ways provenance can be listed. Feel free to message me if you see a format that consistently fails (either doesn't pop up, or doesn't successfully redirect). Do note that some houses/sales simply aren't listed in ACSearch/Numisbids. 
 
 If a citation doesn't resolve, you can manually enter the NumisBids sale ID via the popup (🏛️ → **Manual Cache Entry**). The **Test Parser** field lets you check whether a citation will parse correctly before trying it on a page.
 
@@ -68,7 +70,7 @@ Once confirmed, the `?` disappears. A ✎ button lets you re-edit. House-level c
 
 ### NumisBids watchlist
 
-All watched lots are annotated with their buyer's premium. Tentative rates show `(+20%?)` in italic; confirmed rates show `(+20%)` normally. Confirm rates via individual lot pages — the watchlist doesn't show confirm buttons to keep it readable.
+All watched lots are annotated with their buyer's premium. Tentative rates show `(+20%?)` in italic; confirmed rates show `(+20%)` normally. Confirm rates via individual lot pages the watchlist doesn't show confirm buttons to keep it readable and minimize page fetches.
 
 ### Biddr
 
