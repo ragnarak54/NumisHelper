@@ -173,6 +173,161 @@
   }
 
 
+  function nextMeaningfulTextNode(startNode) {
+    function scanSiblings(node) {
+      let cur = node.nextSibling;
+      while (cur) {
+        if (cur.nodeType === Node.TEXT_NODE && cur.textContent.trim()) return cur;
+        if (cur.nodeType === Node.ELEMENT_NODE) {
+          const inner = document.createTreeWalker(cur, NodeFilter.SHOW_TEXT);
+          const first = inner.nextNode();
+          if (first && first.textContent.trim()) return first;
+        }
+        cur = cur.nextSibling;
+      }
+      return null;
+    }
+    const direct = scanSiblings(startNode);
+    if (direct) return direct;
+    if (startNode.parentNode) return scanSiblings(startNode.parentNode);
+    return null;
+  }
+
+  // Inject price annotations. confidence: 'confirmed' | 'tentative' | 'unknown'
+  function injectPrices(premiumPct, confidence, saleId, houseName) {
+    document.querySelectorAll('.__numis_premium__').forEach(el => el.remove());
+    const isTentative = confidence !== 'confirmed';
+
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const trimmed = node.textContent.trim();
+      let amount, currency, insertAfterNode;
+
+      const inlineM = normVal(trimmed).match(inlineLabelRe);
+      if (inlineM) {
+        amount = parseFloat(inlineM[1].replace(/[,'\u00a0\s]/g, ''));
+        currency = inlineM[2];
+        insertAfterNode = node;
+      } else if (labelRe.test(trimmed)) {
+        const valueNode = nextMeaningfulTextNode(node);
+        if (!valueNode) continue;
+        const vm = normVal(valueNode.textContent.trim()).match(valueRe);
+        if (!vm) continue;
+        amount = parseFloat(vm[1].replace(/[,'\u00a0\s]/g, ''));
+        currency = vm[2];
+        insertAfterNode = valueNode;
+      } else {
+        continue;
+      }
+
+      if (isNaN(amount) || amount <= 0) continue;
+      const afterInsert = insertAfterNode.nextSibling;
+      if (afterInsert && afterInsert.className === '__numis_premium__') continue;
+
+      const withPremium = formatWithPremium(amount, currency, premiumPct);
+      const wrap = document.createElement('span');
+      wrap.className = '__numis_premium__';
+
+      if (!isTentative) {
+        wrap.title = `Hammer ${amount} ${currency} + ${premiumPct}% buyer's premium`;
+        const confirmedText = document.createElement('span');
+        confirmedText.textContent = ` \u2192 ${withPremium} (+${premiumPct}%)`;
+        wrap.appendChild(confirmedText);
+
+        if (isLotPage) {
+          const editBtn = document.createElement('button');
+          editBtn.textContent = '\u270e';
+          editBtn.title = "Edit buyer's premium";
+          editBtn.style.cssText = 'font-size:0.7em;padding:0 4px;cursor:pointer;background:none;' +
+            'border:1px solid #ccc;border-radius:3px;color:#aaa;line-height:1.4;margin-left:4px;vertical-align:middle;';
+          editBtn.addEventListener('mouseover', e => e.stopPropagation());
+          editBtn.addEventListener('mouseenter', e => e.stopPropagation());
+          editBtn.addEventListener('click', () => injectPrices(premiumPct, 'tentative', saleId, houseName));
+          wrap.appendChild(editBtn);
+        }
+      } else if (!isLotPage) {
+        wrap.title = `Tentative: ${premiumPct}% buyer's premium (unconfirmed)`;
+        wrap.textContent = ` \u2192 ${withPremium} (+${premiumPct}%?)`;
+        wrap.style.cssText = 'color:#a08840;font-style:italic;opacity:0.85;';
+      } else {
+        const isUnknown = confidence === 'unknown';
+        wrap.style.cssText = 'display:inline;';
+
+        const priceLine = document.createElement('span');
+        priceLine.style.cssText = 'color:#a08840;font-style:italic;white-space:nowrap;';
+
+        const totalSpan = document.createElement('span');
+        totalSpan.className = '__np_total__';
+        totalSpan.textContent = isUnknown ? ' \u2192 ? (' : ' \u2192 ' + withPremium + ' (';
+        priceLine.appendChild(totalSpan);
+
+        const pctInput = document.createElement('input');
+        pctInput.type = 'number';
+        if (!isUnknown) pctInput.value = premiumPct;
+        pctInput.placeholder = isUnknown ? '?' : '';
+        pctInput.min = '0'; pctInput.max = '50'; pctInput.step = '0.5';
+        pctInput.title = "Edit buyer's premium %";
+        pctInput.style.cssText = 'width:36px;font-size:0.85em;padding:0 2px;border:1px solid #c8a84b;' +
+          'border-radius:3px;font-family:inherit;color:#7a5c00;background:#fffbe6;vertical-align:middle;font-style:normal;';
+        priceLine.appendChild(pctInput);
+
+        const closeParen = document.createElement('span');
+        closeParen.textContent = '%?)';
+        priceLine.appendChild(closeParen);
+        wrap.appendChild(priceLine);
+
+        const BTN = 'font-size:0.72em;padding:1px 6px;cursor:pointer;background:#f5f0e8;' +
+          'border:1px solid #b8860b;border-radius:3px;color:#5a3e00;line-height:1.6;margin-right:3px;';
+        const stopPop = e => e.stopPropagation();
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:block;margin-top:3px;';
+        btnRow.addEventListener('mouseover', stopPop);
+        btnRow.addEventListener('mouseenter', stopPop);
+        btnRow.addEventListener('mousemove', stopPop);
+
+        const confirmSaleBtn = document.createElement('button');
+        confirmSaleBtn.textContent = '\u2713 Sale';
+        confirmSaleBtn.title = 'Confirm for this sale only';
+        confirmSaleBtn.style.cssText = BTN;
+        btnRow.appendChild(confirmSaleBtn);
+
+        if (houseName) {
+          const confirmHouseBtn = document.createElement('button');
+          confirmHouseBtn.textContent = '\u2713 ' + houseName;
+          confirmHouseBtn.title = 'Confirm for all ' + houseName + ' sales';
+          confirmHouseBtn.style.cssText = BTN;
+          btnRow.appendChild(confirmHouseBtn);
+          confirmHouseBtn.addEventListener('click', async () => {
+            const pct = parseFloat(pctInput.value);
+            if (isNaN(pct) || pct < 0 || pct > 50) return;
+            await new Promise(r => chrome.runtime.sendMessage({ type: 'CONFIRM_PREMIUM_HOUSE', house: houseName, pct }, r));
+            injectPrices(pct, 'confirmed', saleId, houseName);
+          });
+        }
+        wrap.appendChild(btnRow);
+
+        pctInput.addEventListener('input', () => {
+          const newPct = parseFloat(pctInput.value);
+          totalSpan.textContent = (!isNaN(newPct) && newPct >= 0)
+            ? ' \u2192 ' + formatWithPremium(amount, currency, newPct) + ' ('
+            : ' \u2192 ? (';
+        });
+
+        confirmSaleBtn.addEventListener('click', async () => {
+          const pct = parseFloat(pctInput.value);
+          if (isNaN(pct) || pct < 0 || pct > 50) return;
+          await new Promise(r => chrome.runtime.sendMessage({ type: 'CONFIRM_PREMIUM_SALE', saleId, pct, house: houseName }, r));
+          injectPrices(pct, 'confirmed', saleId, houseName);
+        });
+      }
+
+      const parent = insertAfterNode.parentNode;
+      if (afterInsert) parent.insertBefore(wrap, afterInsert);
+      else parent.appendChild(wrap);
+    }
+  }
+
   // ── CURRENCY POPUP AUGMENTATION ──────────────────────────────────────────
   // NumisBids shows a dynamic popup on hover over prices with approximate
   // values in EUR/USD/GBP. We observe the DOM for this popup appearing and
@@ -248,6 +403,7 @@
   async function injectWatchlistPrices() {
     // premiumMap persists across initial load and mutation observer callbacks
     const premiumMap = {};
+    const premiumInFlight = {}; // deduplicate concurrent calls for same sid
 
     function findSaleIdForNode(node) {
       let el = node.parentElement;
@@ -291,6 +447,14 @@
     }
 
     async function ensurePremium(sid) {
+      // Deduplicate: if a fetch is already in-flight for this sid, wait for it
+      if (sid in premiumInFlight) return premiumInFlight[sid];
+      const promise = _ensurePremium(sid);
+      premiumInFlight[sid] = promise;
+      try { return await promise; } finally { delete premiumInFlight[sid]; }
+    }
+
+    async function _ensurePremium(sid) {
       // 1. Sale-level confirmation — highest priority, always wins
       const confirmedKey = `nb_confirmed_sale::${sid}`;
       const saleConfirmed = await new Promise(r =>

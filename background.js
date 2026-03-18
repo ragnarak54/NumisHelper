@@ -11,6 +11,9 @@
 
 'use strict';
 
+// In-memory cache for firm names extracted from sale pages (avoids repeated fetches)
+let GET_KNOWN_PREMIUM_CACHE = {};
+
 // ── ACSEARCH COMPANY IDs ───────────────────────────────────────────────────
 // From https://www.acsearch.info/companies.html
 // Maps citation-style names → ACSearch company ID.
@@ -657,17 +660,33 @@ function extractAcAuctionId(html, targetSaleNum, targetYear) {
 // ── KNOWN PREMIUM LOOKUP ──────────────────────────────────────────────────
 
 async function lookupKnownPremium(firmRaw) {
-  // Check user overrides first — return with isOverride flag so caller can
-  // bypass the per-sale cache and always respect the latest user setting.
+  // Resolve a name to its canonical KNOWN_PREMIUMS key (e.g. "CNG" or "Classical Numismatic Group" → "CNG")
+  function canonicalize(name) {
+    if (name in KNOWN_PREMIUMS) return name;
+    const n = name.toLowerCase().replace(/[&.,'-]/g, ' ').replace(/\s+/g, ' ').trim();
+    const keys = Object.keys(KNOWN_PREMIUMS).sort((a, b) => b.length - a.length);
+    for (const key of keys) {
+      const kn = key.toLowerCase().replace(/[&.,'-]/g, ' ').replace(/\s+/g, ' ').trim();
+      const words = kn.split(' ').filter(Boolean);
+      if (words.length > 0 && words.every(w => new RegExp('(?<![a-z])' + w + '(?![a-z])').test(n)))
+        return key;
+    }
+    return name;
+  }
+
+  // Check user overrides first — compare by canonical name so "CNG" matches
+  // an override stored as "Classical Numismatic Group" and vice versa.
   const allStorage = await new Promise(r => chrome.storage.local.get(null, r));
+  const firmCanon = canonicalize(firmRaw);
   const firmNorm = firmRaw.toLowerCase().replace(/[&.,'-]/g, ' ').replace(/\s+/g, ' ').trim();
   for (const [k, v] of Object.entries(allStorage)) {
     if (!k.startsWith('nb_premium_override::')) continue;
     const overrideHouse = k.slice('nb_premium_override::'.length);
+    const overrideCanon = canonicalize(overrideHouse);
     const overrideNorm = overrideHouse.toLowerCase().replace(/[&.,'-]/g, ' ').replace(/\s+/g, ' ').trim();
-    // Exact match first
+    // Match if canonical names agree, or by direct fuzzy word match
+    if (overrideCanon === firmCanon) return { premium: v, isOverride: true, confidence: 'confirmed' };
     if (overrideNorm === firmNorm) return { premium: v, isOverride: true, confidence: 'confirmed' };
-    // Fuzzy: all words of the override key appear as whole words in firmRaw
     const words = overrideNorm.split(' ').filter(Boolean);
     if (words.length > 0 && words.every(w => new RegExp('(?<![a-z])' + w + '(?![a-z])').test(firmNorm)))
       return { premium: v, isOverride: true, confidence: 'confirmed' };
@@ -724,21 +743,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let firmRaw = '';
 
         if (message.firmNameHint) {
-          // Watchlist: firm name already extracted from DOM, skip page fetch
+          // Watchlist/lot page with hint: firm name already extracted from DOM, skip page fetch
           firmRaw = message.firmNameHint;
         } else {
-          // Lot page: fetch sale index to extract firm name from title
-          const resp = await fetch(`https://www.numisbids.com/sale/${message.saleId}`, {
-            headers: { 'User-Agent': navigator.userAgent }
-          });
-          if (!resp.ok) { sendResponse({}); return; }
-          const html = await resp.text();
-          const titleTag = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || '';
-          const decoded = titleTag.replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ');
-          const dashM = decoded.match(/^([^-]+?)\s+-\s+/);
-          const nbM = decoded.match(/NumisBids:\s*([^-<,]+?)(?:\s*[-,]|\s*Sale|\s*Auction|\s*Lot)/i);
-          firmRaw = (dashM?.[1] || nbM?.[1] || '').trim();
-          if (!firmRaw) { sendResponse({}); return; }
+          // Lot page: fetch sale index to extract firm name from title.
+          // Cache results in memory so each sale page is only fetched once per session.
+          if (!GET_KNOWN_PREMIUM_CACHE) GET_KNOWN_PREMIUM_CACHE = {};
+          if (GET_KNOWN_PREMIUM_CACHE[message.saleId]) {
+            firmRaw = GET_KNOWN_PREMIUM_CACHE[message.saleId];
+          } else {
+            const resp = await fetch(`https://www.numisbids.com/sale/${message.saleId}`, {
+              headers: { 'User-Agent': navigator.userAgent }
+            });
+            if (!resp.ok) { sendResponse({}); return; }
+            const html = await resp.text();
+            const titleTag = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1] || '';
+            const decoded = titleTag.replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ');
+            const dashM = decoded.match(/^([^-]+?)\s+-\s+/);
+            const nbM = decoded.match(/NumisBids:\s*([^-<,]+?)(?:\s*[-,]|\s*Sale|\s*Auction|\s*Lot)/i);
+            firmRaw = (dashM?.[1] || nbM?.[1] || '').trim();
+            if (!firmRaw) { sendResponse({}); return; }
+            GET_KNOWN_PREMIUM_CACHE[message.saleId] = firmRaw;
+          }
         }
 
         const { premium, isOverride, confidence } = await lookupKnownPremium(firmRaw);
