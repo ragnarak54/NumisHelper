@@ -466,10 +466,18 @@
         return result;
       }
 
-      // 2. House-level override — also confirmed
+      // 2. House-level override / known table
+      // Only send GET_KNOWN_PREMIUM if we have a firmName from the DOM.
+      // Without firmNameHint the background would fetch the sale page — too many requests on watchlist.
       const firmName = extractFirmNameForSale(sid);
+      if (!firmName) {
+        // No firm name available — skip to unknown
+        premiumMap[sid] = { pct: null, confidence: 'unknown' };
+        return premiumMap[sid];
+      }
+
       const known = await new Promise(r =>
-        chrome.runtime.sendMessage({ type: 'GET_KNOWN_PREMIUM', saleId: sid, firmNameHint: firmName || undefined }, r)
+        chrome.runtime.sendMessage({ type: 'GET_KNOWN_PREMIUM', saleId: sid, firmNameHint: firmName }, r)
       );
       if (known?.isOverride) {
         const result = { pct: known.premium, confidence: 'confirmed' };

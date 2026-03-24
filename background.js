@@ -430,8 +430,12 @@ function buildGoogleQuery(parsed) {
   // - For Roman numeral sales, search the original string (e.g. "XLVIII") not the integer (48)
   //   since NumisBids titles use the Roman numeral form
   const h = parsed.house.replace(/[&'.,]/g, ' ').replace(/\s+/g, ' ').trim();
-  const saleToken = parsed.saleRaw || String(parsed.saleNumber);
-  const parts = [`site:numisbids.com`, h, saleToken];
+  // For date-based/named sales (saleNumber is null), use the dateStr or year instead
+  const saleToken = parsed.saleNumber != null
+    ? (parsed.saleRaw || String(parsed.saleNumber))
+    : (parsed.dateStr || null);
+  const parts = [`site:numisbids.com`, h];
+  if (saleToken) parts.push(saleToken);
   if (parsed.year) parts.push(String(parsed.year));
   return parts.join(' ');
 }
@@ -533,6 +537,18 @@ function nbSalePageMatchesParsed(html, parsed) {
     return r;
   }
 
+  // Date-based / named sales (saleNumber is null) — validate by year and dateStr tokens
+  if (parsed.saleNumber == null) {
+    if (!parsed.year) return false;
+    if (!title.includes(String(parsed.year))) return false;
+    // If we have a dateStr like "February Sale", check at least one word appears in title
+    if (parsed.dateStr) {
+      const words = parsed.dateStr.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      return words.some(w => title.includes(w));
+    }
+    return true;
+  }
+
   if (isRoman) {
     const romanRe = new RegExp('(?<![a-z])' + parsed.saleRaw.toLowerCase() + '(?![a-z])');
     if (romanRe.test(titleForNumberCheck)) return true;
@@ -552,7 +568,8 @@ function nbSalePageMatchesParsed(html, parsed) {
 }
 
 async function resolveNumisBids(parsed) {
-  const cacheKey = nbCacheKey(parsed.house, parsed.saleNumber);
+  const saleKey = parsed.saleNumber != null ? parsed.saleNumber : (parsed.dateStr || parsed.year || 'date');
+  const cacheKey = nbCacheKey(parsed.house, saleKey);
   const cached = await get(cacheKey);
   if (cached !== null) return { saleId: cached, source: 'cached' };
 

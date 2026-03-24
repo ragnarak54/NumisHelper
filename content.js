@@ -145,7 +145,9 @@
 
   function buildNBGoogleFallback(parsed) {
     const h = parsed.house.replace(/[&'.,]/g, ' ').replace(/\s+/g, ' ').trim();
-    const parts = [`site:numisbids.com`, `"${h}"`, `"${parsed.saleNumber}"`];
+    const parts = [`site:numisbids.com`, `"${h}"`];
+    if (parsed.saleNumber != null) parts.push(`"${parsed.saleRaw || parsed.saleNumber}"`);
+    else if (parsed.dateStr) parts.push(`"${parsed.dateStr}"`);
     if (parsed.year) parts.push(`"${parsed.year}"`);
     return `https://www.google.com/search?q=${encodeURIComponent(parts.join(' '))}`;
   }

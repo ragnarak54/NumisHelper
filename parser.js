@@ -353,6 +353,19 @@
 
     let m;
 
+    // Pattern -1: "House, [Season/Month] [Sale/Auction] YEAR, [lot] LOT#"
+    // e.g. "NAC, February Sale 2026, Lot 398" or "NAC, Spring Auction 2025, Lot 100"
+    // The named sale is treated as a date-based citation (no sale number).
+    m = text.match(/^([^,\d]+?),\s*(?:january|february|march|april|may|june|july|august|september|october|november|december|spring|summer|autumn|fall|winter)\s+(?:sale|auction)?\s*(?:january|february|march|april|may|june|july|august|september|october|november|december|spring|summer|autumn|fall|winter)?\s*(\d{4}),\s*(?:(?:lot|los|nr\.?)\s+)?(\d+)$/i);
+    if (m) {
+      const house = canonicalizeHouse(m[1].trim());
+      const year = parseInt(m[2], 10);
+      const lotNumber = parseInt(m[3], 10);
+      if (isValidHouse(house) && lotNumber > 0) {
+        return { house, saleNumber: null, saleRaw: null, year, lotNumber, raw: text, dateStr: m[0].match(/(?:january|february|march|april|may|june|july|august|september|october|november|december|spring|summer|autumn|fall|winter)[^,]*/i)?.[0] };
+      }
+    }
+
     // Pattern 0: "House, SeriesQualifier SALE#, DATE, [lot] LOT#"
     // e.g. "CNG, E-auction 461, 12 février 2020, 340"
     // e.g. "CNG, Electronic Auction 461, 12 February 2020, lot 340"
